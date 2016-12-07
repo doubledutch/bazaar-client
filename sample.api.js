@@ -1,5 +1,5 @@
 import React, { Component } from 'react'
-import ReactNative, { AsyncStorage } from 'react-native'
+import ReactNative, { AsyncStorage, Alert } from 'react-native'
 import Horizon from '@horizon/client'
 
 const DD = ReactNative.NativeModules.DDBindings
@@ -9,7 +9,12 @@ const horizonHost = 'localhost:8181'
 
 export default class {
 
-  constructor() {
+  constructor(featureName, eventID) {
+    this.featureName = featureName
+    this.eventID = eventID
+    this.cleanEventID = eventID.replace(/-/g, '')
+    this.user = {}
+
     var globalHash = {  }
     window.localStorage = {
       getItem: (key) => {
@@ -35,21 +40,23 @@ export default class {
       // TODO - if we have a token, try to connect
       // IF we succeed, cool
       // IF we fail, call the endpoint to exchange a IS token for a JWT
-      AsyncStorage.getItem('@BB:horizon-jwt').then((value) => {
-        debugger
-        // DUMMY value for my user account
-        if (!value) {
-          value = JSON.stringify({ horizon: 'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjkwMTAyLTEyMy0xMjMtMTIzLTEyM18xMjM0NSIsInByb3ZpZGVyIjpudWxsLCJpYXQiOjE0ODA1NTUxNTcsImV4cCI6MTQ4NDE1NTE1N30.SfBrBjaLe4MBjyAO__PFGFzfd0nF-3o-Wz8RBn363EadHl310Y3O1MkyZSH3wlDwTI6P1ppuEfASjsOmh99NSw' })
+
+      const finalizeLogin = (token, installation, user) => {
+        if (token) {
+          window.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }))
         }
-        if (value) {
-          window.localStorage.prepopulateMap('horizon-jwt', value)
-        }
+
+        AsyncStorage.setItem('@BB:' + this.featureName + '_installation', JSON.stringify(installation));
+        this.installation = installation
+
+        AsyncStorage.setItem('@BB:' + this.featureName + '_user', JSON.stringify(user));
+        this.user = user
 
         this.horizon = Horizon({
           host: horizonHost,
           authType: {
             storeLocally: true,
-            token: JSON.parse(value).horizon
+            token: token
           }
         })
 
@@ -65,8 +72,81 @@ export default class {
         })
 
         this.horizon.connect()
+      }
+
+      AsyncStorage.multiGet(['@BB:horizon-jwt', '@BB:' + this.featureName + '_installation', '@BB:' + this.featureName + '_user']).then(([[tokenKey, token], [instKey, installation], [userKey, user]]) => {
+        token = null
+        // DUMMY value for my user account
+        if (!token) {
+          DD.requestAccessToken((err, token) => {
+            var loginURL = 'http://localhost:8181/login'+ '?eventID=' + this.eventID + '&featureName=' + this.featureName
+            fetch(loginURL , { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).
+              then((response) => response.json()).then((data) => {
+                finalizeLogin(data.token, data.installation, data.user)
+              }).catch((err) => {
+                debugger
+              })
+          })
+        } else {
+          finalizeLogin(JSON.parse(token).horizon, JSON.parse(installation), JSON.parse(user))
+        }
+        // if (!value) {
+        //   value = JSON.stringify({ horizon: 'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjkwMTAyLTEyMy0xMjMtMTIzLTEyM18xMjM0NSIsInByb3ZpZGVyIjpudWxsLCJpYXQiOjE0ODA1NTUxNTcsImV4cCI6MTQ4NDE1NTE1N30.SfBrBjaLe4MBjyAO__PFGFzfd0nF-3o-Wz8RBn363EadHl310Y3O1MkyZSH3wlDwTI6P1ppuEfASjsOmh99NSw' })
+        // }
       })
     })
+  }
+
+  getUserID() {
+    return this.user.id
+  }
+
+  getCollectionName(collectionName) {
+    return this.featureName + '_' + this.cleanEventID + '_' + collectionName
+  }
+
+  getCollection(collectionName) {
+    return this.horizon(this.getCollectionName(collectionName))
+  }
+
+  insertIntoCollection(collectionName, ...documents) {
+    return this.getCollection(collectionName).insert(documents)
+  }
+
+  replaceInCollection(collectionName, ...documents) {
+    return this.getCollection(collectionName).replace(documents)
+  }
+
+  updateInCollection(collectionName, ...documents) {
+    return this.getCollection(collectionName).update(documents)
+  }
+
+  upsertInCollection(collectionName, ...documents) {
+    return this.getCollection(collectionName).upsert(documents)
+  }
+
+  removeFromCollection(collectionName, ...documents) {
+    return this.getCollection(collectionName).removeAll(documents)
+  }
+
+  findInCollection(collectionName, query) {
+    const q = this.horizon(this.getCollectionName(collectionName)).find(query)
+    return q.fetch()
+  }
+
+  findAllInCollection(collectionName, query) {
+    const q = this.horizon(this.getCollectionName(collectionName)).findAll(query)
+    return q.fetch()
+  }
+
+  fetchAllInCollection(collectionName) {
+    const q = this.horizon(this.getCollectionName(collectionName))
+    return q.fetch()
+  }
+
+  watchAllInCollection(collectionName) {
+    const q = this.horizon(this.getCollectionName(collectionName))
+    return q.watch()
   }
 
   static dismissCard(eventID, templateID, id) {
