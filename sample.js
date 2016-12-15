@@ -32,32 +32,26 @@ class CardView extends Component {
   componentDidMount() {
     var self = this
 
-    this.api.connect().then(() => {
-      this.api.watchAllInCollection('first_collection').subscribe((results) => {
+    this.api.connect().then((user) => {
+      this.api.fetchUserDocumentsInCollection(collection = 'second_collection', query = null, watch = true).subscribe((results) => {
         this.setState({ sampleItems: results })
       })
     }).catch((err) => {
-      Alert.alert(err)
+      Alert.alert('Error: ' + err)
     })
 
     // Log 
-    this.onLogMetric("base", "base", { action: 'loaded' })
-    DD.setTitle('Now')
-  }
-
-  onLogMetric(templateID, id, data) {
-    SampleAPI.logCardMetric(eventID, templateID, id, data).then((response) => {
-    })
+    DD.setTitle('Sample Feature')
   }
 
   insertSample() {
     const document = { user_id: this.api.getUserID(), name: new Date().getTime(), image_url: 'Something Else....' }
-    this.api.insertIntoCollection('first_collection', document)
+    this.api.insertIntoCollection('second_collection', document)
   }
 
   deleteSample() {
     if (this.state.sampleItems.length) {
-      this.api.removeFromCollection('first_collection', { id: this.state.sampleItems[0].id })
+      this.api.removeFromCollection('second_collection', { id: this.state.sampleItems[0].id })
     }
   }
 
@@ -68,7 +62,6 @@ class CardView extends Component {
     return (
       <View title="" style={{ flex: 1 }}>
         <Text>{ids}</Text>
-        <Text>{this.api.getUserID()}</Text>
         <TouchableOpacity onPress={this.insertSample.bind(this)} style={{ padding: 5, backgroundColor: 'blue', margin: 10 }}>
           <Text style={{ color: 'white' }}>Insert item into list</Text>
         </TouchableOpacity>

@@ -1,6 +1,7 @@
 import React, { Component } from 'react'
 import ReactNative, { AsyncStorage, Alert } from 'react-native'
 import Horizon from '@horizon/client'
+import shimStorage from './native-localstorage-shim'
 
 const DD = ReactNative.NativeModules.DDBindings
 const cardsBaseURL = "https://stroom.doubledutch.me/api/cards"
@@ -15,24 +16,7 @@ export default class {
     this.cleanEventID = eventID.replace(/-/g, '')
     this.user = {}
 
-    var globalHash = {  }
-    window.localStorage = {
-      getItem: (key) => {
-        return globalHash[key]
-      },
-      removeItem: (key) => {
-        delete globalHash[key]
-      },
-      setItem: (key, value) => {
-        if (key === 'horizon-jwt') {
-          AsyncStorage.setItem('@BB:' + key, value);
-        }
-        globalHash[key] = value
-      },
-      prepopulateMap: (key, hash) => {
-        globalHash[key] = hash
-      }
-    }
+    shimStorage()
   }
 
   connect() {
@@ -41,15 +25,33 @@ export default class {
       // IF we succeed, cool
       // IF we fail, call the endpoint to exchange a IS token for a JWT
 
-      const finalizeLogin = (token, installation, user) => {
+      const requestLogin = () => {
+        DD.requestAccessToken((err, token) => {
+          var loginURL = 'http://localhost:8181/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
+
+          fetch(loginURL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).
+            then((response) => {
+              if (response.status !== 200) {
+                throw "Invalid response code: " + response.status
+              }
+              return response.json()
+            }).then((data) => {
+              finalizeLogin(data.token, data.installation, data.user, false)
+            }).catch((err) => {
+              reject(err)
+            })
+        })
+      }
+
+      const finalizeLogin = (token, installation, user, loginFromStoredToken) => {
         if (token) {
           window.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }))
         }
 
-        AsyncStorage.setItem('@BB:' + this.featureName + '_installation', JSON.stringify(installation));
+        window.localStorage.setItem('@BB:' + this.featureName + '_installation', installation);
         this.installation = installation
 
-        AsyncStorage.setItem('@BB:' + this.featureName + '_user', JSON.stringify(user));
+        window.localStorage.setItem('@BB:' + this.featureName + '_user', user);
         this.user = user
 
         this.horizon = Horizon({
@@ -68,31 +70,26 @@ export default class {
         })
 
         this.horizon.onSocketError((err) => {
-          reject(err)
+          Alert.alert(err)
+          if (loginFromStoredToken) {
+            // try again?
+            requestLogin()
+          } else {
+            reject(err)
+          }
         })
 
         this.horizon.connect()
       }
 
-      AsyncStorage.multiGet(['@BB:horizon-jwt', '@BB:' + this.featureName + '_installation', '@BB:' + this.featureName + '_user']).then(([[tokenKey, token], [instKey, installation], [userKey, user]]) => {
-        token = null
+      window.localStorage.multiGet(['horizon-jwt', this.featureName + '_installation', this.featureName + '_user']).then(([[tokenKey, token], [instKey, installation], [userKey, user]]) => {
         // DUMMY value for my user account
+        token = false
         if (!token) {
-          DD.requestAccessToken((err, token) => {
-            var loginURL = 'http://localhost:8181/login'+ '?eventID=' + this.eventID + '&featureName=' + this.featureName
-            fetch(loginURL , { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).
-              then((response) => response.json()).then((data) => {
-                finalizeLogin(data.token, data.installation, data.user)
-              }).catch((err) => {
-                debugger
-              })
-          })
+          requestLogin()
         } else {
-          finalizeLogin(JSON.parse(token).horizon, JSON.parse(installation), JSON.parse(user))
+          finalizeLogin(JSON.parse(token).horizon, installation, user, true)
         }
-        // if (!value) {
-        //   value = JSON.stringify({ horizon: 'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjkwMTAyLTEyMy0xMjMtMTIzLTEyM18xMjM0NSIsInByb3ZpZGVyIjpudWxsLCJpYXQiOjE0ODA1NTUxNTcsImV4cCI6MTQ4NDE1NTE1N30.SfBrBjaLe4MBjyAO__PFGFzfd0nF-3o-Wz8RBn363EadHl310Y3O1MkyZSH3wlDwTI6P1ppuEfASjsOmh99NSw' })
-        // }
       })
     })
   }
@@ -129,125 +126,18 @@ export default class {
     return this.getCollection(collectionName).removeAll(documents)
   }
 
-  findInCollection(collectionName, query) {
-    const q = this.horizon(this.getCollectionName(collectionName)).find(query)
-    return q.fetch()
+  fetchUserDocumentsInCollection(collectionName, query = null, watch = false) {
+    let userQuery = { user_id: this.getUserID() }
+    if (query) {
+      userQuery = Object.assign({}, query, userQuery)
+    }
+    const q = this.getCollection(collectionName).findAll(userQuery)
+    return watch ? q.watch() : q.fetch()
   }
 
-  findAllInCollection(collectionName, query) {
-    const q = this.horizon(this.getCollectionName(collectionName)).findAll(query)
-    return q.fetch()
-  }
-
-  fetchAllInCollection(collectionName) {
-    const q = this.horizon(this.getCollectionName(collectionName))
-    return q.fetch()
-  }
-
-  watchAllInCollection(collectionName) {
-    const q = this.horizon(this.getCollectionName(collectionName))
-    return q.watch()
-  }
-
-  static dismissCard(eventID, templateID, id) {
-    return new Promise((resolve, reject) => {
-      DD.requestAccessToken((err, token) => {
-        fetch(cardsBaseURL + '/' + id + '?eventID=' + eventID, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } }).
-          then((response) => {
-            // The card is deleted here
-          })
-      })
-    })
-  }
-
-  static logCardMetric(eventID, templateID, id, data) {
-    return new Promise((resolve, reject) => {
-      DD.requestAccessToken((err, token) => {
-        const options = {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify(data)
-        }
-        fetch(cardsBaseURL + '/' + id + '/log' + '?eventID=' + eventID + '&templateID=' + templateID, options).
-          then((response) => {
-            // The metric is logged here
-          })
-      })
-    })
-  }
-
-  static updateCard(eventID, templateID, id, cardData) {
-    return new Promise((resolve, reject) => {
-      DD.requestAccessToken((err, token) => {
-        const options = {
-          method: 'PUT',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-          },
-          body: JSON.stringify({ id: id, data: cardData })
-        }
-
-        fetch(cardsBaseURL + '/' + id + '?eventID=' + eventID, options).then((response) => {
-          // The card is updated here
-          // alert(response)
-        })
-      })
-    })
-  }
-
-  static fetchFeed(eventID) {
-    return new Promise((resolve, reject) => {
-      DD.requestAccessToken((err, token) => {
-        var url = cardsBaseURL + '?eventID=' + eventID
-        fetch(url, { method: 'GET', headers: { Authorization: 'Bearer ' + token } })
-          .then((response) => response.json())
-          .catch((error) => {
-            console.error(error)
-          })
-          .then((cards) => {
-            console.log('got feed data')
-            var templateNames = cards.reduce((prev, curr) => {
-              prev[curr.template] = true
-              return prev
-            }, {})
-            if (Object.keys(templateNames).length) {
-              var filterPrefix = '&filter='
-              var filter = filterPrefix + Object.keys(templateNames).join(filterPrefix)
-              var url = templatesBaseURL + '?' + filter + '&eventID=' + eventID
-              console.log(url)
-              fetch(url, { method: 'GET', headers: { Authorization: 'Bearer ' + token } })
-                .then((response) => {
-                  console.log('data')
-                  var x = response.json()
-                  console.log('data')
-                  return x
-                })
-                .catch((error) => {
-                  console.error(error)
-                })
-                .then((templateData) => {
-                  console.log('got template data')
-                  var templates = []
-                  if (templateData && templateData.length) {
-                    templateData.forEach((t) => {
-                      try {
-                        var loadTemplate = eval('(function() { function _defineProperty(obj, key, value) {if (key in obj) {Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true });} else {obj[key] = value;}return obj;} _extends = Object.assign || function (target) {for (var i = 1; i < arguments.length; i++) {var source = arguments[i];for (var key in source) {if (Object.prototype.hasOwnProperty.call(source, key)) {target[key] = source[key];}}}return target;}; _inherits = babelHelpers.inherits; _classCallCheck = babelHelpers.classCallCheck; _possibleConstructorReturn = babelHelpers.possibleConstructorReturn; _createClass = babelHelpers.createClass; ' + t.compiled + '; return loadTemplate; })()')
-                        templates.push({ id: t.id, loadTemplate: loadTemplate })
-                      } catch (e) {
-                        console.error(e)
-                      }
-                    })
-                  }
-
-                  // TODO - change this once we add filtering?
-                  cards = cards.filter((c) => templates.find((t) => t.id === c.template))
-                  resolve([cards, templates])
-                })
-            }
-          })
-      })
-    })
+  fetchDocumentsInCollection(collectionName, query = null, watch = false) {
+    const collection = this.getCollection(collectionName)
+    const q = query && Object.keys(query).length ? collection.findAll(query) : collection
+    return watch ? q.watch() : q.fetch()
   }
 }
