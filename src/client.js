@@ -1,16 +1,14 @@
-import React, { Component } from 'react'
-import ReactNative, { AsyncStorage, Alert } from 'react-native'
+import ReactNative, { Alert, AsyncStorage } from 'react-native'
 import Horizon from '@horizon/client'
 import shimStorage from './native-localstorage-shim'
 
-const DD = ReactNative.NativeModules.DDBindings
-const cardsBaseURL = "https://stroom.doubledutch.me/api/cards"
-const templatesBaseURL = "https://stroom.doubledutch.me/api/templates"
 const horizonHost = 'localhost:8181'
 
 export default class {
 
-  constructor(featureName, eventID) {
+  constructor(DD, isSandboxed, featureName, eventID) {
+    this.DD = DD
+    this.isSandboxed = isSandboxed
     this.featureName = featureName
     this.eventID = eventID
     this.cleanEventID = eventID.replace(/-/g, '')
@@ -26,7 +24,7 @@ export default class {
       // IF we fail, call the endpoint to exchange a IS token for a JWT
 
       const requestLogin = () => {
-        DD.requestAccessToken((err, token) => {
+        this.DD.requestAccessToken((err, token) => {
           var loginURL = 'http://localhost:8181/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
 
           fetch(loginURL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).
