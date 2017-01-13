@@ -12,18 +12,6 @@ var {
     Image
 } = ReactNative;
 
-const DD = NativeModules.DDBindings
-function getConfig(){
-  var config = DD.configuration;
-  if (Platform.OS === 'android') {
-    config =  JSON.parse(DD.configuration)
-   }
-   return config;
-}
-const primaryColor = getConfig().Colors.filter((c) => {
-  return c.Name === "kPrimaryColor"
-})[0].Value
-
 function newRandomRoute() {
   return {
     title: '#' + Math.ceil(Math.random() * 1000),
@@ -43,7 +31,7 @@ var NavigationBarRouteMapper = {
 
     return (
       <TouchableOpacity
-        onPress={() => { DD.showMenu() }}
+        onPress={() => { this.props.showMenu() }}
         style={styles.navBarLeftButton}>
         <View>
         <Image source={{uri : leftIcon}} resizeMode='contain' style={[styles.hamburger]} />
@@ -90,7 +78,7 @@ class DDView extends React.Component{
                 navigationBar={
                   <Navigator.NavigationBar
                     routeMapper={NavigationBarRouteMapper}
-                    style={styles.navBar}
+                    style={[styles.navBar, {backgroundColor: this.props.primaryColor}]}
                   />
                 }
             />
@@ -111,7 +99,7 @@ var styles = StyleSheet.create({
       backgroundColor: 'orange',
     },
     navBar: {
-      backgroundColor: primaryColor,
+      backgroundColor: '#fff',
     },
     navBarText: {
       fontSize: 16,

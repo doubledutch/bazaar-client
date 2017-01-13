@@ -1,17 +1,19 @@
 import ReactNative, { Alert, AsyncStorage } from 'react-native'
 import Horizon from '@horizon/client'
 import shimStorage from './native-localstorage-shim'
-
-const horizonHost = 'localhost:8181'
+import shimDD from './dd-shim'
 
 export default class {
 
-  constructor(DD, isSandboxed, featureName, eventID) {
-    this.DD = DD
-    this.isSandboxed = isSandboxed
-    this.featureName = featureName
-    this.eventID = eventID
-    this.cleanEventID = eventID.replace(/-/g, '')
+  constructor(DD, options) {
+    this.DD = DD || shimDD
+    this.isSandboxed = options.isSandboxed
+    this.featureName = options.featureName
+    this.eventID = options.eventID
+    this.horizonHost = options.horizonHost
+    this.scheme = options.isSandboxed ? 'http://' : 'https://'
+    this.loginUrl =  this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
+    this.cleanEventID = this.eventID.replace(/-/g, '')
     this.user = {}
 
     shimStorage()
@@ -25,7 +27,7 @@ export default class {
 
       const requestLogin = () => {
         this.DD.requestAccessToken((err, token) => {
-          var loginURL = 'http://localhost:8181/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
+          var loginURL = this.loginUrl
 
           fetch(loginURL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).
             then((response) => {
@@ -53,7 +55,7 @@ export default class {
         this.user = user
 
         this.horizon = Horizon({
-          host: horizonHost,
+          host: this.horizonHost,
           authType: {
             storeLocally: true,
             token: token

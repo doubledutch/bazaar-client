@@ -1,6 +1,6 @@
 {
   "name": "bazaar-client",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "private": false,
   "main": "src/index.js",
   "nativePackage": true,
@@ -19,7 +19,6 @@
     "react-native"
   ],
   "dependencies": {
-    "@horizon/client": "^2.0.0"
   },
   "devDependencies": {
     "babel-loader": "^6.2.10",
@@ -28,13 +27,17 @@
     "cross-env": "^3.1.3",
     "uglifyjs": "^2.4.10",
     "webpack": "^1.14.0",
-    "react": "^15.3.0",
-    "react-native": "^0.32.1",
-    "react-native-fs": "^1.5.1",
     "babel-plugin-add-module-exports": "^0.2.1",
     "babel-plugin-transform-runtime": "^6.15.0",
     "babel-preset-es2015": "^6.18.0",
-    "babel-preset-es2015-loose": "^8.0.0",
-    "prepack": "^0.1.1"
+    "babel-preset-es2015-loose": "^8.0.0"
+  },
+  "peerDependencies" : {
+    "react": "^15.4.1",
+    "react-addons-update": "^15.4.1",
+    "react-native": "^0.39.2",
+    "react-native-fs": "^1.5.1",
+    "prepack": "^0.1.1",
+    "@horizon/client": "^2.0.0"
   }
 }
