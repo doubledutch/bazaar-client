@@ -56,6 +56,7 @@ export default class {
 
         this.horizon = Horizon({
           host: this.horizonHost,
+          secure: !this.isSandboxed,
           authType: {
             storeLocally: true,
             token: token
