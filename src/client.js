@@ -12,7 +12,7 @@ export default class {
     this.eventID = options.eventID
     this.horizonHost = options.horizonHost
     this.scheme = options.isSandboxed ? 'http://' : 'https://'
-    this.loginUrl =  this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
+    this.loginUrl = this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
     this.cleanEventID = this.eventID.replace(/-/g, '')
     this.user = {}
 
@@ -43,6 +43,10 @@ export default class {
         })
       }
 
+      this.initialLoginAttempt = true
+      this.droppedConnectionCount = 0
+      this.lastDroppedConnection = null
+
       const finalizeLogin = (token, installation, user, loginFromStoredToken) => {
         if (token) {
           window.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }))
@@ -65,18 +69,28 @@ export default class {
 
         this.horizon.onReady(() => {
           this.horizon.currentUser().fetch().subscribe((user) => {
+            this.initialLoginAttempt = false
             this.currentUser = user
             resolve(user)
           })
         })
 
         this.horizon.onSocketError((err) => {
-          Alert.alert(err)
-          if (loginFromStoredToken) {
-            // try again?
-            requestLogin()
+          // If we failed on our initial connection, the token is bad
+          // OR we don't have the feature installed or something to that effect
+          if (this.initialLoginAttempt) {
+            if (loginFromStoredToken) {
+              // try again?
+              requestLogin()
+            } else {
+              reject(err)
+            }
           } else {
-            reject(err)
+            // Our connection was likely dropped. Let's try to connect again
+            // TODO - do some checks on the last dropped connection
+            this.lastDroppedConnection = new Date()
+            this.droppedConnectionCount++
+            finalizeLogin(token, installation, user, loginFromStoredToken)
           }
         })
 
