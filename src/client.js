@@ -91,6 +91,7 @@ export default class {
             this.lastDroppedConnection = new Date()
             this.droppedConnectionCount++
             finalizeLogin(token, installation, user, loginFromStoredToken)
+            // TODO - should we notify that a connection was dropped and allow queries to be re-watched?
           }
         })
 
