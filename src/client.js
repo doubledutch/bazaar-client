@@ -5,8 +5,8 @@ import shimDD from './dd-shim'
 
 export default class {
 
-  constructor(DD, options) {
-    this.DD = DD || shimDD
+  constructor(dd, options) {
+    this.DD = dd || shimDD
     this.isSandboxed = options.isSandboxed
     this.featureName = options.featureName
     this.eventID = options.eventID
