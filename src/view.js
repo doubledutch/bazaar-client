@@ -57,7 +57,6 @@ class DDView extends React.Component {
 
 var styles = StyleSheet.create({
   hamburger: {
-    flex: 1,
     marginVertical: 12,
     height: 17,
     width: 23,

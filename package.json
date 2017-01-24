@@ -1,6 +1,6 @@
 {
   "name": "bazaar-client",
-  "version": "0.40.3",
+  "version": "0.40.4",
   "private": false,
   "main": "src/index.js",
   "nativePackage": true,
