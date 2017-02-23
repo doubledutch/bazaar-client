@@ -1,6 +1,7 @@
 import Horizon from '@horizon/client'
 import shimDD from './dd-shim'
 import { Platform } from 'react-native'
+const crypto = require('./crypto')
 
 export default class {
 
@@ -133,14 +134,8 @@ export default class {
     return this.user.id
   }
   getUserIDFromEmail(emailAddress) {
-    const md5 = Platform.select({
-      ios: () => null,
-      android: () => null,
-      default: () => require("crypto").createHash('md5').update
-    })()
-
-    if (md5) {
-      return this.eventID + '_' + md5(emailAddress).digest('hex')
+    if (crypto) {
+      return this.eventID + '_' + crypto.createHash('md5').update(emailAddress).digest('hex')
     } else {
       throw 'Crypto not currently supported'
     }
