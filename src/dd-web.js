@@ -1,8 +1,8 @@
 const bearerPrefix = 'Bearer '
 export default { install : (onReady) => {
-  window.DD.Events.onReady(() => {
-    window.DD.Events.getCurrentUserAsync((userJSON) => {
-      window.DD.Events.getCurrentEventAsync((eventJSON) => {
+  global.DD.Events.onReady(() => {
+    global.DD.Events.getCurrentUserAsync((userJSON) => {
+      global.DD.Events.getCurrentEventAsync((eventJSON) => {
         onReady(
           {
             primaryColor : '#000',
@@ -15,12 +15,12 @@ export default { install : (onReady) => {
               console.warn('setTitle not implemented on web')
             },
             requestAccessToken: (callback) => {
-              window.DD.Events.getSignedAPIAsync('', '', (url, auth) => {
+              global.DD.Events.getSignedAPIAsync('', '', (url, auth) => {
                 callback(null, auth.substring(bearerPrefix.length, auth.length))
               })
             },
             refreshAccessToken: (token, callback) => {
-              window.DD.Events.getSignedAPIAsync('', '', (url, auth) => {
+              global.DD.Events.getSignedAPIAsync('', '', (url, auth) => {
                 callback(null, auth.substring(bearerPrefix.length, auth.length))
               })
             },

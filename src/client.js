@@ -1,12 +1,12 @@
-import ReactNative, { Alert, AsyncStorage } from 'react-native'
 import Horizon from '@horizon/client'
-import shimStorage from './native-localstorage-shim'
 import shimDD from './dd-shim'
+import { Platform } from 'react-native'
 
 export default class {
 
   constructor(dd, options) {
     this.DD = dd || shimDD
+    this.options = options
     this.isSandboxed = options.isSandboxed
     this.featureName = options.featureName
     this.eventID = options.eventID
@@ -16,7 +16,10 @@ export default class {
     this.cleanEventID = this.eventID.replace(/-/g, '')
     this.user = {}
 
-    shimStorage()
+    if (!options.skipShim && !global.localStorage) {
+      const shimStorage = require('./native-localstorage-shim').default
+      shimStorage()
+    }
   }
 
   connect() {
@@ -49,13 +52,19 @@ export default class {
 
       const finalizeLogin = (token, installation, user, loginFromStoredToken) => {
         if (token) {
-          window.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }))
+          if (global.localStorage) {
+            global.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }))
+          }
         }
 
-        window.localStorage.setItem('@BB:' + this.featureName + '_installation', installation);
+        if (global.localStorage) {
+          global.localStorage.setItem('@BB:' + this.featureName + '_installation', installation);
+        }
         this.installation = installation
 
-        window.localStorage.setItem('@BB:' + this.featureName + '_user', user);
+        if (global.localStorage) {
+          global.localStorage.setItem('@BB:' + this.featureName + '_user', user);
+        }
         this.user = user
 
         this.horizon = Horizon({
@@ -64,11 +73,17 @@ export default class {
           authType: {
             storeLocally: true,
             token: token
-          }
+          },
+          WebSocketCtor: this.options.webSocketCtor
         })
 
         this.horizon.onReady(() => {
           this.horizon.currentUser().fetch().subscribe((user) => {
+
+            if (!this.eventID || !this.eventID.length) {
+              this.eventID = user.eventID
+              this.cleanEventID = this.eventID.replace(/-/g, '')
+            }
             this.initialLoginAttempt = false
             this.currentUser = user
             resolve(user)
@@ -98,20 +113,37 @@ export default class {
         this.horizon.connect()
       }
 
-      window.localStorage.multiGet(['horizon-jwt', this.featureName + '_installation', this.featureName + '_user']).then(([[tokenKey, token], [instKey, installation], [userKey, user]]) => {
-        // DUMMY value for my user account
-        token = false
-        if (!token) {
-          requestLogin()
-        } else {
-          finalizeLogin(JSON.parse(token).horizon, installation, user, true)
-        }
-      })
+      if (this.options.token) {
+        finalizeLogin(this.options.token, {}, {}, true)
+      } else {
+        global.localStorage.multiGet(['horizon-jwt', this.featureName + '_installation', this.featureName + '_user']).then(([[tokenKey, token], [instKey, installation], [userKey, user]]) => {
+          // DUMMY value for my user account
+          token = false
+          if (!token) {
+            requestLogin()
+          } else {
+            finalizeLogin(JSON.parse(token).horizon, installation, user, true)
+          }
+        })
+      }
     })
   }
 
   getUserID() {
     return this.user.id
+  }
+  getUserIDFromEmail(emailAddress) {
+    const md5 = Platform.select({
+      ios: () => null,
+      android: () => null,
+      default: () => require("crypto").createHash('md5').update
+    })()
+
+    if (md5) {
+      return this.eventID + '_' + md5(emailAddress).digest('hex')
+    } else {
+      throw 'Crypto not currently supported'
+    }
   }
 
   getCollectionName(collectionName) {

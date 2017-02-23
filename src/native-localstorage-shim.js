@@ -2,7 +2,7 @@ import ReactNative, { AsyncStorage } from 'react-native'
 
 export default () => {
   var globalHash = {  }
-  window.localStorage = {
+  global.localStorage = {
     getItem: (key) => {
       return globalHash[key]
     },
