@@ -1,6 +1,5 @@
 import Horizon from '@horizon/client'
 import shimDD from './dd-shim'
-import { Platform } from 'react-native'
 const crypto = require('./crypto')
 
 export default class {
@@ -15,7 +14,7 @@ export default class {
     this.scheme = options.isSandboxed ? 'http://' : 'https://'
     this.loginUrl = this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
     this.cleanEventID = this.eventID.replace(/-/g, '')
-    this.user = {}
+    this.currentUser = {}
 
     if (!options.skipShim && !global.localStorage) {
       const shimStorage = require('./native-localstorage-shim').default
@@ -66,7 +65,7 @@ export default class {
         if (global.localStorage) {
           global.localStorage.setItem('@BB:' + this.featureName + '_user', user);
         }
-        this.user = user
+        this.currentUser = user
 
         this.horizon = Horizon({
           host: this.horizonHost,
