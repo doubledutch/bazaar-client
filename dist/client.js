@@ -166,7 +166,7 @@ var _class = function () {
   }, {
     key: 'getUserID',
     value: function getUserID() {
-      return this.user.id;
+      return this.currentUser.id;
     }
   }, {
     key: 'getUserIDFromEmail',

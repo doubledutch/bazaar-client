@@ -1,6 +1,6 @@
 {
   "name": "bazaar-client",
-  "version": "0.40.9",
+  "version": "0.40.12",
   "private": false,
   "main": "dist/index.js",
   "nativePackage": true,
@@ -37,8 +37,8 @@
     "webpack": "^1.14.0"
   },
   "peerDependencies": {
-    "react": "15.4.1",
-    "react-addons-update": "15.4.1",
+    "react": "15.4.2",
+    "react-addons-update": "15.4.2",
     "react-native": "0.40.0",
     "prepack": "^0.1.1",
     "@horizon/client": "^2.0.0"

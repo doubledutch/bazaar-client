@@ -15,11 +15,20 @@ export default class {
     this.loginUrl = this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName
     this.cleanEventID = this.eventID.replace(/-/g, '')
     this.currentUser = {}
+    this.reconnectCallbacks = []
 
     if (!options.skipShim && !global.localStorage) {
       const shimStorage = require('./native-localstorage-shim').default
       shimStorage()
     }
+  }
+
+  addOnReconnect(callback) {
+    this.reconnectCallbacks.push(callback)
+  }
+
+  removeOnReconnect(callback) {
+    this.reconnectCallbacks = this.reconnectCallbacks.filter((c) => c !== callback)
   }
 
   connect() {
@@ -78,16 +87,21 @@ export default class {
         })
 
         this.horizon.onReady(() => {
-          this.horizon.currentUser().fetch().subscribe((user) => {
+          if (this.initialLoginAttempt) {
+            this.horizon.currentUser().fetch().subscribe((user) => {
 
-            if (!this.eventID || !this.eventID.length) {
-              this.eventID = user.eventID
-              this.cleanEventID = this.eventID.replace(/-/g, '')
-            }
-            this.initialLoginAttempt = false
-            this.currentUser = user
-            resolve(user)
-          })
+              if (!this.eventID || !this.eventID.length) {
+                this.eventID = user.eventID
+                this.cleanEventID = this.eventID.replace(/-/g, '')
+              }
+              
+              this.initialLoginAttempt = false
+              this.currentUser = user
+              resolve(user)
+            })
+          } else {
+            this.reconnectCallbacks.forEach((c) => c())
+          }
         })
 
         this.horizon.onSocketError((err) => {
@@ -130,7 +144,7 @@ export default class {
   }
 
   getUserID() {
-    return this.user.id
+    return this.currentUser.id
   }
   getUserIDFromEmail(emailAddress) {
     if (crypto) {
