@@ -36,6 +36,7 @@ var _class = function () {
     this.loginUrl = this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName;
     this.cleanEventID = this.eventID.replace(/-/g, '');
     this.currentUser = {};
+    this.reconnectCallbacks = [];
 
     if (!options.skipShim && !global.localStorage) {
       var shimStorage = require('./native-localstorage-shim').default;
@@ -44,6 +45,18 @@ var _class = function () {
   }
 
   _createClass(_class, [{
+    key: 'addOnReconnect',
+    value: function addOnReconnect(callback) {
+      this.reconnectCallbacks.push(callback);
+    }
+  }, {
+    key: 'removeOnReconnect',
+    value: function removeOnReconnect(callback) {
+      this.reconnectCallbacks = this.reconnectCallbacks.filter(function (c) {
+        return c !== callback;
+      });
+    }
+  }, {
     key: 'connect',
     value: function connect() {
       var _this = this;
@@ -102,16 +115,23 @@ var _class = function () {
           });
 
           _this.horizon.onReady(function () {
-            _this.horizon.currentUser().fetch().subscribe(function (user) {
+            if (_this.initialLoginAttempt) {
+              _this.horizon.currentUser().fetch().subscribe(function (user) {
 
-              if (!_this.eventID || !_this.eventID.length) {
-                _this.eventID = user.eventID;
-                _this.cleanEventID = _this.eventID.replace(/-/g, '');
-              }
-              _this.initialLoginAttempt = false;
-              _this.currentUser = user;
-              resolve(user);
-            });
+                if (!_this.eventID || !_this.eventID.length) {
+                  _this.eventID = user.eventID;
+                  _this.cleanEventID = _this.eventID.replace(/-/g, '');
+                }
+
+                _this.initialLoginAttempt = false;
+                _this.currentUser = user;
+                resolve(user);
+              });
+            } else {
+              _this.reconnectCallbacks.forEach(function (c) {
+                return c();
+              });
+            }
           });
 
           _this.horizon.onSocketError(function (err) {
