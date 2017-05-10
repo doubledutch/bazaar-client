@@ -16,11 +16,26 @@ var _ddShim = require('./dd-shim');
 
 var _ddShim2 = _interopRequireDefault(_ddShim);
 
+var _BehaviorSubject = require('rxjs/BehaviorSubject');
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var crypto = require('./crypto');
+
+// NOTE: PULLED FROM THE HORIZON LIB
+// Before connecting the first time
+var STATUS_UNCONNECTED = { type: 'unconnected' };
+// After the websocket is opened and handshake is completed
+var STATUS_READY = { type: 'ready' };
+// After unconnected, maybe before or after connected. Any socket level error
+var STATUS_ERROR = { type: 'error' };
+// Occurs when the socket closes
+var STATUS_DISCONNECTED = { type: 'disconnected' };
+// DD specific
+var STATUS_CONNECTING = { type: 'connecting' };
+var STATUS_AUTHENTICATING = { type: 'authenticating' };
 
 var _class = function () {
   function _class(dd, options) {
@@ -33,15 +48,19 @@ var _class = function () {
     this.eventID = options.eventID;
     this.horizonHost = options.horizonHost;
     this.scheme = options.isSandboxed ? 'http://' : 'https://';
-    this.loginUrl = this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName;
+    this.apiRootURL = this.DD.apiRootURL;
+    this.loginUrl = this.scheme + this.horizonHost + '/login' + '?eventID=' + this.eventID + '&featureName=' + this.featureName + '&apiRootURL=' + encodeURIComponent(this.apiRootURL);
     this.cleanEventID = this.eventID.replace(/-/g, '');
     this.currentUser = {};
     this.reconnectCallbacks = [];
+    this.isDisconnecting = false;
 
     if (!options.skipShim && !global.localStorage) {
       var shimStorage = require('./native-localstorage-shim').default;
       shimStorage();
     }
+
+    this.status = new _BehaviorSubject.BehaviorSubject(STATUS_UNCONNECTED);
   }
 
   _createClass(_class, [{
@@ -66,6 +85,7 @@ var _class = function () {
         // IF we succeed, cool
         // IF we fail, call the endpoint to exchange a IS token for a JWT
 
+        _this.status.next(STATUS_AUTHENTICATING);
         var requestLogin = function requestLogin() {
           _this.DD.requestAccessToken(function (err, token) {
             var loginURL = _this.loginUrl;
@@ -78,6 +98,7 @@ var _class = function () {
             }).then(function (data) {
               finalizeLogin(data.token, data.installation, data.user, false);
             }).catch(function (err) {
+              _this.status.next(STATUS_ERROR);
               reject(err);
             });
           });
@@ -115,6 +136,9 @@ var _class = function () {
           });
 
           _this.horizon.onReady(function () {
+            // We've connected, let's reduce our back-off for next reconnection
+            _this.droppedConnectionCount = 0;
+            _this.status.next(STATUS_READY);
             if (_this.initialLoginAttempt) {
               _this.horizon.currentUser().fetch().subscribe(function (user) {
 
@@ -135,25 +159,37 @@ var _class = function () {
           });
 
           _this.horizon.onSocketError(function (err) {
-            // If we failed on our initial connection, the token is bad
-            // OR we don't have the feature installed or something to that effect
-            if (_this.initialLoginAttempt) {
-              if (loginFromStoredToken) {
-                // try again?
-                requestLogin();
+            if (!_this.isDisconnecting) {
+              _this.status.next(STATUS_DISCONNECTED);
+
+              // If we failed on our initial connection, the token is bad
+              // OR we don't have the feature installed or something to that effect
+              if (_this.initialLoginAttempt) {
+                if (loginFromStoredToken) {
+                  // try again?
+                  requestLogin();
+                } else {
+                  reject(err);
+                }
               } else {
-                reject(err);
+                // Our connection was likely dropped. Let's try to connect again
+                // TODO - do some checks on the last dropped connection
+                _this.lastDroppedConnection = new Date();
+
+                // Reconnect after a backoff period
+                setTimeout(function () {
+                  finalizeLogin(token, installation, user, loginFromStoredToken);
+                }, _this.droppedConnectionCount++ * 1500);
+
+                // TODO - should we notify that a connection was dropped and allow queries to be re-watched?
+                // We do this above
               }
             } else {
-              // Our connection was likely dropped. Let's try to connect again
-              // TODO - do some checks on the last dropped connection
-              _this.lastDroppedConnection = new Date();
-              _this.droppedConnectionCount++;
-              finalizeLogin(token, installation, user, loginFromStoredToken);
-              // TODO - should we notify that a connection was dropped and allow queries to be re-watched?
+              _this.status.next(STATUS_DISCONNECTED);
             }
           });
 
+          _this.status.next(STATUS_CONNECTING);
           _this.horizon.connect();
         };
 
@@ -184,6 +220,14 @@ var _class = function () {
       });
     }
   }, {
+    key: 'disconnect',
+    value: function disconnect() {
+      if (this.horizon) {
+        this.isDisconnecting = true;
+        this.horizon.disconnect();
+      }
+    }
+  }, {
     key: 'getUserID',
     value: function getUserID() {
       return this.currentUser.id;
@@ -200,7 +244,7 @@ var _class = function () {
   }, {
     key: 'getCollectionName',
     value: function getCollectionName(collectionName) {
-      return this.featureName + '_' + this.cleanEventID + '_' + collectionName;
+      return this.featureName + '_' + /*this.cleanEventID + '_' + */collectionName;
     }
   }, {
     key: 'getCollection',
@@ -210,46 +254,71 @@ var _class = function () {
   }, {
     key: 'insertIntoCollection',
     value: function insertIntoCollection(collectionName) {
+      var _this2 = this;
+
       for (var _len = arguments.length, documents = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
         documents[_key - 1] = arguments[_key];
       }
 
+      documents = documents.map(function (d) {
+        return Object.assign({}, d, { event_id: _this2.eventID });
+      });
       return this.getCollection(collectionName).insert(documents);
     }
   }, {
     key: 'replaceInCollection',
     value: function replaceInCollection(collectionName) {
+      var _this3 = this;
+
       for (var _len2 = arguments.length, documents = Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
         documents[_key2 - 1] = arguments[_key2];
       }
 
+      documents = documents.map(function (d) {
+        return Object.assign({}, d, { event_id: _this3.eventID });
+      });
       return this.getCollection(collectionName).replace(documents);
     }
   }, {
     key: 'updateInCollection',
     value: function updateInCollection(collectionName) {
+      var _this4 = this;
+
       for (var _len3 = arguments.length, documents = Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
         documents[_key3 - 1] = arguments[_key3];
       }
 
+      documents = documents.map(function (d) {
+        return Object.assign({}, d, { event_id: _this4.eventID });
+      });
       return this.getCollection(collectionName).update(documents);
     }
   }, {
     key: 'upsertInCollection',
     value: function upsertInCollection(collectionName) {
+      var _this5 = this;
+
       for (var _len4 = arguments.length, documents = Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
         documents[_key4 - 1] = arguments[_key4];
       }
 
+      documents = documents.map(function (d) {
+        return Object.assign({}, d, { event_id: _this5.eventID });
+      });
       return this.getCollection(collectionName).upsert(documents);
     }
   }, {
     key: 'removeFromCollection',
     value: function removeFromCollection(collectionName) {
+      var _this6 = this;
+
       for (var _len5 = arguments.length, documents = Array(_len5 > 1 ? _len5 - 1 : 0), _key5 = 1; _key5 < _len5; _key5++) {
         documents[_key5 - 1] = arguments[_key5];
       }
 
+      documents = documents.map(function (d) {
+        return Object.assign({}, d, { event_id: _this6.eventID });
+      });
       return this.getCollection(collectionName).removeAll(documents);
     }
   }, {
@@ -262,17 +331,20 @@ var _class = function () {
       if (query) {
         userQuery = Object.assign({}, query, userQuery);
       }
-      var q = this.getCollection(collectionName).findAll(userQuery);
+      var eventScopedQuery = Object.assign({}, userQuery, { event_id: this.eventID });
+
+      var q = this.getCollection(collectionName).findAll(eventScopedQuery);
       return watch ? q.watch() : q.fetch();
     }
   }, {
     key: 'fetchDocumentsInCollection',
     value: function fetchDocumentsInCollection(collectionName) {
-      var query = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
+      var query = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
       var watch = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
 
       var collection = this.getCollection(collectionName);
-      var q = query && Object.keys(query).length ? collection.findAll(query) : collection;
+      var eventScopedQuery = Object.assign({}, query, { event_id: this.eventID });
+      var q = collection.findAll(eventScopedQuery);
       return watch ? q.watch() : q.fetch();
     }
   }]);
