@@ -2,19 +2,7 @@ import Horizon from '@horizon/client'
 import shimDD from './dd-shim'
 import { BehaviorSubject } from 'rxjs/BehaviorSubject'
 const crypto = require('./crypto')
-
-// NOTE: PULLED FROM THE HORIZON LIB
-// Before connecting the first time
-const STATUS_UNCONNECTED = { type: 'unconnected' }
-// After the websocket is opened and handshake is completed
-const STATUS_READY = { type: 'ready' }
-// After unconnected, maybe before or after connected. Any socket level error
-const STATUS_ERROR = { type: 'error' }
-// Occurs when the socket closes
-const STATUS_DISCONNECTED = { type: 'disconnected' }
-// DD specific
-const STATUS_CONNECTING = { type: 'connecting' }
-const STATUS_AUTHENTICATING = { type: 'authenticating' }
+import Statuses from './statuses'
 
 export default class {
 
@@ -41,7 +29,7 @@ export default class {
       shimStorage()
     }
 
-    this.status = new BehaviorSubject(STATUS_UNCONNECTED)
+    this.status = new BehaviorSubject(Statuses.STATUS_UNCONNECTED)
   }
 
   addOnReconnect(callback) {
@@ -58,7 +46,7 @@ export default class {
       // IF we succeed, cool
       // IF we fail, call the endpoint to exchange a IS token for a JWT
 
-      this.status.next(STATUS_AUTHENTICATING)
+      this.status.next(Statuses.STATUS_AUTHENTICATING)
       const requestLogin = () => {
         this.DD.requestAccessToken((err, token) => {
           var loginURL = this.loginUrl
@@ -72,7 +60,7 @@ export default class {
             }).then((data) => {
               finalizeLogin(data.token, data.installation, data.user, false)
             }).catch((err) => {
-              this.status.next(STATUS_ERROR)
+              this.status.next(Statuses.STATUS_ERROR)
               reject(err)
             })
         })
@@ -112,7 +100,7 @@ export default class {
         this.horizon.onReady(() => {
           // We've connected, let's reduce our back-off for next reconnection
           this.droppedConnectionCount = 0
-          this.status.next(STATUS_READY)
+          this.status.next(Statuses.STATUS_READY)
           if (this.initialLoginAttempt) {
             this.horizon.currentUser().fetch().subscribe((user) => {
 
@@ -132,7 +120,7 @@ export default class {
 
         this.horizon.onSocketError((err) => {
           if (!this.isDisconnecting) {
-            this.status.next(STATUS_DISCONNECTED)
+            this.status.next(Statuses.STATUS_DISCONNECTED)
 
             // If we failed on our initial connection, the token is bad
             // OR we don't have the feature installed or something to that effect
@@ -157,11 +145,11 @@ export default class {
               // We do this above
             }
           } else {
-            this.status.next(STATUS_DISCONNECTED)
+            this.status.next(Statuses.STATUS_DISCONNECTED)
           }
         })
 
-        this.status.next(STATUS_CONNECTING)
+        this.status.next(Statuses.STATUS_CONNECTING)
         this.horizon.connect()
       }
 

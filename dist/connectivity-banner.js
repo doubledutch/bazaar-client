@@ -12,6 +12,10 @@ var _react2 = _interopRequireDefault(_react);
 
 var _reactNative = require('react-native');
 
+var _statuses = require('./statuses');
+
+var _statuses2 = _interopRequireDefault(_statuses);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -28,7 +32,7 @@ var _class = function (_Component) {
 
     var _this = _possibleConstructorReturn(this, (_class.__proto__ || Object.getPrototypeOf(_class)).call(this));
 
-    _this.state = { status: 'Idle' };
+    _this.state = { status: _this.getStatusType('idle'), opacity: new _reactNative.Animated.Value(1) };
     _this.setAPI(props.api);
     return _this;
   }
@@ -39,6 +43,33 @@ var _class = function (_Component) {
       this.setAPI(nextProps.api);
     }
   }, {
+    key: 'getStatusType',
+    value: function getStatusType(status) {
+      var statusMap = this.props && this.props.statusMap ? this.props.statusMap : {};
+      if (statusMap[status]) {
+        return statusMap[status];
+      }
+
+      switch (status) {
+        case 'idle':
+          return 'Idle';
+        case _statuses2.default.STATUS_AUTHENTICATING.type:
+          return 'Authenticating';
+        case _statuses2.default.STATUS_CONNECTING.type:
+          return 'Connecting';
+        case _statuses2.default.STATUS_DISCONNECTED.type:
+          return 'Disconnected';
+        case _statuses2.default.STATUS_ERROR.type:
+          return 'Error';
+        case _statuses2.default.STATUS_READY.type:
+          return 'Connected';
+        case _statuses2.default.STATUS_UNCONNECTED.type:
+          return 'Disconnected';
+      }
+
+      return status;
+    }
+  }, {
     key: 'setAPI',
     value: function setAPI(api) {
       var _this2 = this;
@@ -46,9 +77,24 @@ var _class = function (_Component) {
       if (this.api !== api) {
         this.api = api;
 
-        // TODO, hook the event here
         this.api.status.subscribe(function (status) {
-          _this2.setState({ status: status.type });
+          var props = _this2.props || {};
+          _this2.setState({ status: _this2.getStatusType(status.type) });
+          if (status.type === 'ready') {
+            _reactNative.Animated.timing(_this2.state.opacity, {
+              toValue: 0,
+              duration: props.fadeOutDuration || 500,
+              delay: props.fadeOutDelay || 500,
+              useNativeDriver: true
+            }).start();
+          } else {
+            _reactNative.Animated.timing(_this2.state.opacity, {
+              toValue: 1,
+              duration: props.fadeInDuration || 500,
+              delay: props.fadeInDelay || 500,
+              useNativeDriver: true
+            }).start();
+          }
         });
       }
     }
@@ -56,8 +102,8 @@ var _class = function (_Component) {
     key: 'render',
     value: function render() {
       return _react2.default.createElement(
-        _reactNative.View,
-        { style: [styles.container, this.props.style] },
+        _reactNative.Animated.View,
+        { style: [styles.container, { opacity: this.state.opacity }, this.props.style] },
         _react2.default.createElement(
           _reactNative.Text,
           { style: [styles.text, this.props.textStyle] },

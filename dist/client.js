@@ -18,24 +18,15 @@ var _ddShim2 = _interopRequireDefault(_ddShim);
 
 var _BehaviorSubject = require('rxjs/BehaviorSubject');
 
+var _statuses = require('./statuses');
+
+var _statuses2 = _interopRequireDefault(_statuses);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var crypto = require('./crypto');
-
-// NOTE: PULLED FROM THE HORIZON LIB
-// Before connecting the first time
-var STATUS_UNCONNECTED = { type: 'unconnected' };
-// After the websocket is opened and handshake is completed
-var STATUS_READY = { type: 'ready' };
-// After unconnected, maybe before or after connected. Any socket level error
-var STATUS_ERROR = { type: 'error' };
-// Occurs when the socket closes
-var STATUS_DISCONNECTED = { type: 'disconnected' };
-// DD specific
-var STATUS_CONNECTING = { type: 'connecting' };
-var STATUS_AUTHENTICATING = { type: 'authenticating' };
 
 var _class = function () {
   function _class(dd, options) {
@@ -60,7 +51,7 @@ var _class = function () {
       shimStorage();
     }
 
-    this.status = new _BehaviorSubject.BehaviorSubject(STATUS_UNCONNECTED);
+    this.status = new _BehaviorSubject.BehaviorSubject(_statuses2.default.STATUS_UNCONNECTED);
   }
 
   _createClass(_class, [{
@@ -85,7 +76,7 @@ var _class = function () {
         // IF we succeed, cool
         // IF we fail, call the endpoint to exchange a IS token for a JWT
 
-        _this.status.next(STATUS_AUTHENTICATING);
+        _this.status.next(_statuses2.default.STATUS_AUTHENTICATING);
         var requestLogin = function requestLogin() {
           _this.DD.requestAccessToken(function (err, token) {
             var loginURL = _this.loginUrl;
@@ -98,7 +89,7 @@ var _class = function () {
             }).then(function (data) {
               finalizeLogin(data.token, data.installation, data.user, false);
             }).catch(function (err) {
-              _this.status.next(STATUS_ERROR);
+              _this.status.next(_statuses2.default.STATUS_ERROR);
               reject(err);
             });
           });
@@ -138,7 +129,7 @@ var _class = function () {
           _this.horizon.onReady(function () {
             // We've connected, let's reduce our back-off for next reconnection
             _this.droppedConnectionCount = 0;
-            _this.status.next(STATUS_READY);
+            _this.status.next(_statuses2.default.STATUS_READY);
             if (_this.initialLoginAttempt) {
               _this.horizon.currentUser().fetch().subscribe(function (user) {
 
@@ -160,7 +151,7 @@ var _class = function () {
 
           _this.horizon.onSocketError(function (err) {
             if (!_this.isDisconnecting) {
-              _this.status.next(STATUS_DISCONNECTED);
+              _this.status.next(_statuses2.default.STATUS_DISCONNECTED);
 
               // If we failed on our initial connection, the token is bad
               // OR we don't have the feature installed or something to that effect
@@ -185,11 +176,11 @@ var _class = function () {
                 // We do this above
               }
             } else {
-              _this.status.next(STATUS_DISCONNECTED);
+              _this.status.next(_statuses2.default.STATUS_DISCONNECTED);
             }
           });
 
-          _this.status.next(STATUS_CONNECTING);
+          _this.status.next(_statuses2.default.STATUS_CONNECTING);
           _this.horizon.connect();
         };
 
