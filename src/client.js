@@ -23,6 +23,7 @@ export default class {
     this.currentUser = {}
     this.reconnectCallbacks = []
     this.isDisconnecting = false
+    this.autoReconnect = options.autoReconnect
 
     if (!options.skipShim && !global.localStorage) {
       const shimStorage = require('./native-localstorage-shim').default
@@ -228,13 +229,31 @@ export default class {
     const eventScopedQuery = Object.assign({}, userQuery, { event_id: this.eventID })
 
     const q = this.getCollection(collectionName).findAll(eventScopedQuery)
-    return watch ? q.watch() : q.fetch()
+    return watch ? this.wrapAndWatch(q) : q.fetch()
   }
 
   fetchDocumentsInCollection(collectionName, query = {}, watch = false) {
     const collection = this.getCollection(collectionName)
     const eventScopedQuery = Object.assign({}, query, { event_id: this.eventID })
     const q = collection.findAll(eventScopedQuery)
-    return watch ? q.watch() : q.fetch()
+    return watch ? this.wrapAndWatch(q) : q.fetch()
+  }
+
+  wrapAndWatch(q) {
+    if (this.autoReconnect) {
+      return {
+        query: q,
+        subscribe: (...args) => {
+          // When we subscribe, add a reconnect with the same call-backs
+          // so we can handle re-connection automatically
+          this.addOnReconnect(() => {
+            q.watch().subscribe(...args)
+          })
+          q.watch().subscribe(...args)
+        }
+      }
+    } else {
+      return query.watch()
+    }
   }
 }

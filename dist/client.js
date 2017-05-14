@@ -45,6 +45,7 @@ var _class = function () {
     this.currentUser = {};
     this.reconnectCallbacks = [];
     this.isDisconnecting = false;
+    this.autoReconnect = options.autoReconnect;
 
     if (!options.skipShim && !global.localStorage) {
       var shimStorage = require('./native-localstorage-shim').default;
@@ -325,7 +326,7 @@ var _class = function () {
       var eventScopedQuery = Object.assign({}, userQuery, { event_id: this.eventID });
 
       var q = this.getCollection(collectionName).findAll(eventScopedQuery);
-      return watch ? q.watch() : q.fetch();
+      return watch ? this.wrapAndWatch(q) : q.fetch();
     }
   }, {
     key: 'fetchDocumentsInCollection',
@@ -336,7 +337,36 @@ var _class = function () {
       var collection = this.getCollection(collectionName);
       var eventScopedQuery = Object.assign({}, query, { event_id: this.eventID });
       var q = collection.findAll(eventScopedQuery);
-      return watch ? q.watch() : q.fetch();
+      return watch ? this.wrapAndWatch(q) : q.fetch();
+    }
+  }, {
+    key: 'wrapAndWatch',
+    value: function wrapAndWatch(q) {
+      var _this7 = this;
+
+      if (this.autoReconnect) {
+        return {
+          query: q,
+          subscribe: function subscribe() {
+            var _q$watch2;
+
+            for (var _len6 = arguments.length, args = Array(_len6), _key6 = 0; _key6 < _len6; _key6++) {
+              args[_key6] = arguments[_key6];
+            }
+
+            // When we subscribe, add a reconnect with the same call-backs
+            // so we can handle re-connection automatically
+            _this7.addOnReconnect(function () {
+              var _q$watch;
+
+              (_q$watch = q.watch()).subscribe.apply(_q$watch, args);
+            });
+            (_q$watch2 = q.watch()).subscribe.apply(_q$watch2, args);
+          }
+        };
+      } else {
+        return query.watch();
+      }
     }
   }]);
 
