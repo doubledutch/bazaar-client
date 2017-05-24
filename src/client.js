@@ -253,7 +253,7 @@ export default class {
         }
       }
     } else {
-      return query.watch()
+      return q.watch()
     }
   }
 }

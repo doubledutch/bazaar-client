@@ -365,7 +365,7 @@ var _class = function () {
           }
         };
       } else {
-        return query.watch();
+        return q.watch();
       }
     }
   }]);
