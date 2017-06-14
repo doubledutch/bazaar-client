@@ -84,15 +84,13 @@ var _class = function (_Component) {
             _reactNative.Animated.timing(_this2.state.opacity, {
               toValue: 0,
               duration: props.fadeOutDuration || 500,
-              delay: props.fadeOutDelay || 500,
-              useNativeDriver: true
+              delay: props.fadeOutDelay || 500
             }).start();
           } else {
             _reactNative.Animated.timing(_this2.state.opacity, {
               toValue: 1,
               duration: props.fadeInDuration || 500,
-              delay: props.fadeInDelay || 500,
-              useNativeDriver: true
+              delay: props.fadeInDelay || 500
             }).start();
           }
         });

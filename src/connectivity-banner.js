@@ -44,15 +44,13 @@ export default class extends Component {
           Animated.timing(this.state.opacity, {
             toValue: 0,
             duration: props.fadeOutDuration || 500,
-            delay: props.fadeOutDelay || 500,
-            useNativeDriver: true
+            delay: props.fadeOutDelay || 500
           }).start()
         } else {
           Animated.timing(this.state.opacity, {
             toValue: 1,
             duration: props.fadeInDuration || 500,
-            delay: props.fadeInDelay || 500,
-            useNativeDriver: true
+            delay: props.fadeInDelay || 500
           }).start()
         }
       })

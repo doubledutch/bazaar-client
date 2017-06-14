@@ -4,6 +4,8 @@ import { BehaviorSubject } from 'rxjs/BehaviorSubject'
 const crypto = require('./crypto')
 import Statuses from './statuses'
 
+const TOKEN_DURATION = 1000 * 60 * 60 // 1 hour
+
 export default class {
 
   constructor(dd, options) {
@@ -30,6 +32,7 @@ export default class {
       shimStorage()
     }
 
+    this.userID = (this.DD.currentUser && this.DD.currentUser.UserId ? this.DD.currentUser.UserId : 'anon') + ''
     this.status = new BehaviorSubject(Statuses.STATUS_UNCONNECTED)
   }
 
@@ -39,6 +42,10 @@ export default class {
 
   removeOnReconnect(callback) {
     this.reconnectCallbacks = this.reconnectCallbacks.filter((c) => c !== callback)
+  }
+
+  getStorageKey(key) {
+    return `${this.featureName}_${this.userID}_${key}`
   }
 
   connect() {
@@ -75,16 +82,18 @@ export default class {
         if (token) {
           if (global.localStorage) {
             global.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }))
+            global.localStorage.setItem(this.getStorageKey('jwt'), token)
+            global.localStorage.setItem(this.getStorageKey('jwt_exp'), new Date().toISOString())
           }
         }
 
         if (global.localStorage) {
-          global.localStorage.setItem('@BB:' + this.featureName + '_installation', installation);
+          global.localStorage.setItem(this.getStorageKey('installation'), installation);
         }
         this.installation = installation
 
         if (global.localStorage) {
-          global.localStorage.setItem('@BB:' + this.featureName + '_user', user);
+          global.localStorage.setItem(this.getStorageKey('user'), user);
         }
         this.currentUser = user
 
@@ -157,13 +166,23 @@ export default class {
       if (this.options.token) {
         finalizeLogin(this.options.token, {}, {}, true)
       } else {
-        global.localStorage.multiGet(['horizon-jwt', this.featureName + '_installation', this.featureName + '_user']).then(([[tokenKey, token], [instKey, installation], [userKey, user]]) => {
-          // DUMMY value for my user account
-          token = false
+        global.localStorage.multiGet([
+          this.getStorageKey('jwt'),
+          this.getStorageKey('jwt_exp'),
+          this.getStorageKey('installation'),
+          this.getStorageKey('user')
+        ]).then(([[tokenKey, token], [tokenExpKey, tokenExp], [instKey, installation], [userKey, user]]) => {
+          if (token && tokenExp) {
+            const date = new Date(tokenExp)
+            const diff = new Date() - date
+            if (diff > TOKEN_DURATION) {
+              token = null
+            }
+          }
           if (!token) {
             requestLogin()
           } else {
-            finalizeLogin(JSON.parse(token).horizon, installation, user, true)
+            finalizeLogin(token, installation, user, true)
           }
         })
       }

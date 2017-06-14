@@ -28,6 +28,9 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 var crypto = require('./crypto');
 
+
+var TOKEN_DURATION = 1000 * 60 * 60; // 1 hour
+
 var _class = function () {
   function _class(dd, options) {
     _classCallCheck(this, _class);
@@ -52,6 +55,7 @@ var _class = function () {
       shimStorage();
     }
 
+    this.userID = (this.DD.currentUser && this.DD.currentUser.UserId ? this.DD.currentUser.UserId : 'anon') + '';
     this.status = new _BehaviorSubject.BehaviorSubject(_statuses2.default.STATUS_UNCONNECTED);
   }
 
@@ -66,6 +70,11 @@ var _class = function () {
       this.reconnectCallbacks = this.reconnectCallbacks.filter(function (c) {
         return c !== callback;
       });
+    }
+  }, {
+    key: 'getStorageKey',
+    value: function getStorageKey(key) {
+      return this.featureName + '_' + this.userID + '_' + key;
     }
   }, {
     key: 'connect',
@@ -104,16 +113,18 @@ var _class = function () {
           if (token) {
             if (global.localStorage) {
               global.localStorage.prepopulateMap('horizon-jwt', JSON.stringify({ horizon: token }));
+              global.localStorage.setItem(_this.getStorageKey('jwt'), token);
+              global.localStorage.setItem(_this.getStorageKey('jwt_exp'), new Date().toISOString());
             }
           }
 
           if (global.localStorage) {
-            global.localStorage.setItem('@BB:' + _this.featureName + '_installation', installation);
+            global.localStorage.setItem(_this.getStorageKey('installation'), installation);
           }
           _this.installation = installation;
 
           if (global.localStorage) {
-            global.localStorage.setItem('@BB:' + _this.featureName + '_user', user);
+            global.localStorage.setItem(_this.getStorageKey('user'), user);
           }
           _this.currentUser = user;
 
@@ -188,24 +199,32 @@ var _class = function () {
         if (_this.options.token) {
           finalizeLogin(_this.options.token, {}, {}, true);
         } else {
-          global.localStorage.multiGet(['horizon-jwt', _this.featureName + '_installation', _this.featureName + '_user']).then(function (_ref) {
-            var _ref2 = _slicedToArray(_ref, 3),
+          global.localStorage.multiGet([_this.getStorageKey('jwt'), _this.getStorageKey('jwt_exp'), _this.getStorageKey('installation'), _this.getStorageKey('user')]).then(function (_ref) {
+            var _ref2 = _slicedToArray(_ref, 4),
                 _ref2$ = _slicedToArray(_ref2[0], 2),
                 tokenKey = _ref2$[0],
                 token = _ref2$[1],
                 _ref2$2 = _slicedToArray(_ref2[1], 2),
-                instKey = _ref2$2[0],
-                installation = _ref2$2[1],
+                tokenExpKey = _ref2$2[0],
+                tokenExp = _ref2$2[1],
                 _ref2$3 = _slicedToArray(_ref2[2], 2),
-                userKey = _ref2$3[0],
-                user = _ref2$3[1];
+                instKey = _ref2$3[0],
+                installation = _ref2$3[1],
+                _ref2$4 = _slicedToArray(_ref2[3], 2),
+                userKey = _ref2$4[0],
+                user = _ref2$4[1];
 
-            // DUMMY value for my user account
-            token = false;
+            if (token && tokenExp) {
+              var date = new Date(tokenExp);
+              var diff = new Date() - date;
+              if (diff > TOKEN_DURATION) {
+                token = null;
+              }
+            }
             if (!token) {
               requestLogin();
             } else {
-              finalizeLogin(JSON.parse(token).horizon, installation, user, true);
+              finalizeLogin(token, installation, user, true);
             }
           });
         }
